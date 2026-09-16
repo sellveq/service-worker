@@ -1,73 +1,52 @@
 <?php
 
+/**
+ * @category    ScandiPWA
+ * @package     ScandiPWA_ServiceWorker
+ * @copyright   Modifications © Selveq. All rights reserved.
+ * @license     OSL-3.0 (Open Software License ("OSL") v. 3.0)
+ * See LICENSE for license details.
+ */
+
 namespace ScandiPWA\ServiceWorker\Controller\Index;
 
-use Magento\Framework\UrlInterface;
 use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\Filesystem\DirectoryList;
+use Magento\Framework\App\Request\Http;
 use Magento\Framework\Controller\ResultFactory;
-use Magento\Framework\Filesystem\DriverInterface;
+use Magento\Framework\Exception\FileSystemException;
+use Magento\Framework\Filesystem\Driver\File;
+use Magento\Framework\View\Asset\File\NotFoundException as AssetNotFoundException;
 use Magento\Framework\View\Asset\Repository;
 
 class Index implements HttpGetActionInterface
 {
     /**
-     * @var Repository
-     */
-    private $assetRepo;
-
-    /**
-     * @var DriverInterface
-     */
-    private $filesystemDriver;
-
-    /**
-     * @var ResultFactory
-     */
-    private $resultFactory;
-
-    /**
-     * @var UrlInterface
-     */
-    private $urlModel;
-
-    /**
-     * @var DirectoryList
-     */
-    protected $directoryList;
-
-    /**
-     * Index constructor.
-     *
-     * @param DirectoryList $directoryList,
-     * @param DriverInterface $filesystemDriver,
-     * @param Repository $assetRepo,
+     * @param DirectoryList $directoryList
+     * @param File $filesystemDriver
+     * @param Repository $assetRepo
      * @param ResultFactory $resultFactory
+     * @param Http $request
      */
     public function __construct(
-        DirectoryList $directoryList,
-        DriverInterface $filesystemDriver,
-        Repository $assetRepo,
-        ResultFactory $resultFactory,
-        UrlInterface $urlModel
-    ) {
-        $this->directoryList = $directoryList;
-        $this->filesystemDriver = $filesystemDriver;
-        $this->assetRepo = $assetRepo;
-        $this->resultFactory = $resultFactory;
-        $this->urlModel = $urlModel;
-    }
+        private readonly DirectoryList $directoryList,
+        private readonly File $filesystemDriver,
+        private readonly Repository $assetRepo,
+        private readonly ResultFactory $resultFactory,
+        private readonly Http $request
+    ) {}
 
     /**
+     * read the theme's compiled worker, falling back to the asset pipeline when pub/static has none
      * @return string
-     * @throws \Magento\Framework\Exception\FileSystemException
+     * @throws FileSystemException
+     * @throws AssetNotFoundException
      */
-    public function getServiceWorkerContent(): string
+    private function getServiceWorkerContent(): string
     {
         $staticAbsolutePath = $this->directoryList->getPath(DirectoryList::STATIC_VIEW);
         $frontendLocalePath = $this->assetRepo->getStaticViewFileContext()->getPath();
         $serviceWorkerName = 'service-worker.js';
-        $baseUrl = $this->urlModel->getBaseUrl(['_type' => UrlInterface::URL_TYPE_STATIC]);
 
         $bundleFilePath = sprintf(
             '%s/%s/Magento_Theme/%s',
@@ -76,30 +55,43 @@ class Index implements HttpGetActionInterface
             $serviceWorkerName
         );
 
-        if (file_exists($bundleFilePath) !== true) {
-            $bundleFilePath = sprintf(
-                '%s/%s/Magento_Theme/%s',
-                $baseUrl,
-                $frontendLocalePath,
-                $serviceWorkerName
-            );
+        if (!$this->filesystemDriver->isExists($bundleFilePath)) {
+            // resolved in-process because PHP cannot reach the site's own static URL from this container
+            $bundleFilePath = $this->assetRepo
+                ->createAsset(sprintf('Magento_Theme::%s', $serviceWorkerName))
+                ->getSourceFile();
         }
 
         return $this->filesystemDriver->fileGetContents($bundleFilePath);
     }
 
     /**
-     * @inheritdoc
+     * {@inheritdoc}
      */
     public function execute()
     {
-        $content = $this->getServiceWorkerContent();
-        $resultPage = $this->resultFactory
+        // HttpGetActionInterface rejects nothing here: only the first action of a forward chain is validated
+        if (!in_array($this->request->getMethod(), ['GET', 'HEAD'], true)) {
+            // a Raw result carries no body until setContents(), so 405 answers empty on its own
+            return $this->resultFactory
+                ->create(ResultFactory::TYPE_RAW)
+                ->setHttpResponseCode(405)
+                ->setHeader('Allow', 'GET, HEAD');
+        }
+
+        $result = $this->resultFactory
             ->create(ResultFactory::TYPE_RAW)
-            ->setHeader('Content-Type', 'text/javascript')
+            ->setHeader('Content-Type', 'text/javascript');
+
+        try {
+            $content = $this->getServiceWorkerContent();
+        } catch (FileSystemException | AssetNotFoundException) {
+            // AssetNotFoundException is a LogicException, not a FileSystemException, so it needs its own name
+            return $result->setHttpResponseCode(404);
+        }
+
+        return $result
             ->setHeader('Service-Worker-Allowed', '/')
             ->setContents($content);
-
-        return $resultPage;
     }
 }

@@ -1,10 +1,35 @@
 {
-    "name": "scandipwa/service-worker",
+    "name": "selveq/service-worker",
+    "description": "Magento 2 Service Worker extension for ScandiPWA theme",
     "type": "magento2-module",
-    "description": "ScandiPWA service worker router",
+    "version": "2.0.0",
     "license": [
         "OSL-3.0"
     ],
+    "authors": [
+        {
+            "name": "Scandiweb",
+            "homepage": "https://scandiweb.com",
+            "role": "Original author"
+        },
+        {
+            "name": "Selveq",
+            "homepage": "https://selveq.com",
+            "role": "Maintainer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/selveq/service-worker/issues",
+        "source": "https://github.com/selveq/service-worker"
+    },
+    "require": {
+        "php": "^8.3",
+        "magento/framework": "^103.0",
+        "selveq/route717": "^3.0"
+    },
+    "replace": {
+        "scandipwa/service-worker": "*"
+    },
     "autoload": {
         "files": [
             "src/registration.php"
@@ -12,5 +37,11 @@
         "psr-4": {
             "ScandiPWA\\ServiceWorker\\": "src/"
         }
+    },
+    "archive": {
+        "exclude": [
+            "/.github",
+            "/.gitignore"
+        ]
     }
 }

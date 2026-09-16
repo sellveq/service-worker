@@ -1,41 +1,43 @@
 <?php
 
+/**
+ * @category    ScandiPWA
+ * @package     ScandiPWA_ServiceWorker
+ * @copyright   Modifications © Selveq. All rights reserved.
+ * @license     OSL-3.0 (Open Software License ("OSL") v. 3.0)
+ * See LICENSE for license details.
+ */
+
 namespace ScandiPWA\ServiceWorker\Controller;
 
+use Magento\Framework\App\Action\Forward;
 use Magento\Framework\App\ActionFactory;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\App\RouterInterface;
-use Magento\Framework\App\Action\Forward;
 
 class Router implements RouterInterface
 {
     /**
-     * @var ActionFactory
-     */
-    protected $actionFactory;
-
-    /**
-     * Router constructor.
      * @param ActionFactory $actionFactory
      */
     public function __construct(
-        ActionFactory $actionFactory
-    ) {
-        $this->actionFactory = $actionFactory;
-    }
+        private readonly ActionFactory $actionFactory
+    ) {}
 
     /**
-     * @inheritdoc
+     * {@inheritdoc}
      */
     public function match(RequestInterface $request)
     {
-        if (trim($request->getPathInfo(), '/') == 'service-worker.js') {
-            $request
-                ->setModuleName('serviceworker')
-                ->setControllerName('index')
-                ->setActionName('index');
-
-            return $this->actionFactory->create(Forward::class, ['request' => $request]);
+        if (trim($request->getPathInfo(), '/') !== 'service-worker.js') {
+            return null;
         }
+
+        $request
+            ->setModuleName('serviceworker')
+            ->setControllerName('index')
+            ->setActionName('index');
+
+        return $this->actionFactory->create(Forward::class);
     }
 }
